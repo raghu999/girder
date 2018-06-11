@@ -9,13 +9,15 @@ from girder.models.upload import Upload
 from girder.models.user import User
 from tests import base
 
+from girder_plugin_dicom_viewer import _removeUniqueMetadata, _extractFileData
+from girder_plugin_dicom_viewer.event_helper import _EventHelper
+
 
 def setUpModule():
     base.enabledPlugins.append('dicom_viewer')
     base.startServer()
     global _removeUniqueMetadata
     global _extractFileData
-    from girder.plugins.dicom_viewer import _removeUniqueMetadata, _extractFileData
 
 
 def tearDownModule():
@@ -168,8 +170,6 @@ class DicomViewerTest(base.TestCase):
         self.assertIsNotNone(ndcmFile)
 
     def _uploadDicomFiles(self, item, user):
-        from girder.plugins.dicom_viewer.event_helper import _EventHelper
-
         # Upload the files in the reverse order to check if they're well sorted
         for i in [1, 3, 0, 2]:
             file = os.path.join(self.dataDir, '00000%i.dcm' % i)
