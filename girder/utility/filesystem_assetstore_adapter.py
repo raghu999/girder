@@ -25,6 +25,7 @@ import shutil
 import six
 from six import BytesIO
 import stat
+import tarfile
 import tempfile
 
 from girder import events, logger
@@ -262,6 +263,29 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
         else:
             return os.path.join(self.assetstore['root'], file['path'])
 
+    def _downloadFromTar(self, file, offset, endByte):
+        def stream():
+            with tarfile.open(file['path'], 'r') as tar:
+                fh = tar.extractfile(file['pathInTarfile'])
+                bytesRead = offset
+
+                if offset > 0:
+                    fh.seek(offset)
+
+                while True:
+                    readLen = min(BUF_SIZE, endByte - bytesRead)
+                    if readLen <= 0:
+                        break
+
+                    data = fh.read(readLen)
+                    bytesRead += readLen
+
+                    if not data:
+                        break
+                    yield data
+                fh.close()
+        return stream
+
     def downloadFile(self, file, offset=0, headers=True, endByte=None,
                      contentDisposition=None, extraParameters=None, **kwargs):
         """
@@ -271,6 +295,13 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
         if endByte is None or endByte > file['size']:
             endByte = file['size']
 
+        if headers:
+            setResponseHeader('Accept-Ranges', 'bytes')
+            self.setContentHeaders(file, offset, endByte, contentDisposition)
+
+        if file.get('pathInTarfile'):
+            return self._downloadFromTar(file, offset, endByte)
+
         path = self.fullPath(file)
 
         if not os.path.isfile(path):
@@ -278,10 +309,6 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
                 'File %s does not exist.' % path,
                 'girder.utility.filesystem_assetstore_adapter.'
                 'file-does-not-exist')
-
-        if headers:
-            setResponseHeader('Accept-Ranges', 'bytes')
-            self.setContentHeaders(file, offset, endByte, contentDisposition)
 
         def stream():
             bytesRead = offset
@@ -391,8 +418,6 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
         self.importFile(item, path, user, name=name)
 
     def _importTar(self, path, folder, progress, user):
-        import tarfile
-
         folderCache = {}
 
         def _resolveFolder(name):
@@ -425,7 +450,7 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
                         size=entry.size, saveFile=False)
                     file['path'] = path
                     file['imported'] = True
-                    file['importedFromTar'] = True
+                    file['pathInTarfile'] = entry.name
                     File().save(file)
 
     def importData(self, parent, parentType, params, progress, user, leafFoldersAsItems):
