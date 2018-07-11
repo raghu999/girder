@@ -29,7 +29,8 @@ import tempfile
 
 from girder import events, logger
 from girder.api.rest import setResponseHeader
-from girder.exceptions import ValidationException, GirderException
+from girder.constants import AccessType
+from girder.exceptions import AccessException, ValidationException, GirderException
 from girder.models.file import File
 from girder.models.folder import Folder
 from girder.models.item import Item
@@ -389,11 +390,53 @@ class FilesystemAssetstoreAdapter(AbstractAssetstoreAdapter):
         })
         self.importFile(item, path, user, name=name)
 
+    def _importTar(self, path, folder, progress, user):
+        import tarfile
+
+        folderCache = {}
+
+        def _resolveFolder(name):
+            if name in {'.', ''}:  # This file is at the top level
+                return folder
+            if name not in folderCache:
+                tokens = name.split('/')
+                sub = folder
+                for token in tokens:
+                    if token == '.':
+                        continue
+                    sub = Folder().createFolder(sub, token, creator=user, reuseExisting=True)
+                folderCache[name] = sub
+
+            return folderCache[name]
+
+        with tarfile.open(path, 'r') as tar:
+            for entry in tar:
+                if entry.isreg():
+                    dir, name = os.path.split(entry.name)
+                    progress.update(message=entry.name)
+                    parent = _resolveFolder(dir)
+                    if not Folder().hasAccess(parent, user, AccessType.WRITE):
+                        raise AccessException('Write access denied for folder: %s' % folder['_id'])
+                    item = Item().createItem(
+                        name=name, creator=user, folder=parent, reuseExisting=True)
+                    file = File().createFile(
+                        name=name, creator=user, item=item, reuseExisting=True,
+                        assetstore=self.assetstore,
+                        size=entry.size, saveFile=False)
+                    file['path'] = path
+                    file['imported'] = True
+                    file['importedFromTar'] = True
+                    File().save(file)
+
     def importData(self, parent, parentType, params, progress, user, leafFoldersAsItems):
         importPath = params['importPath']
 
         if not os.path.exists(importPath):
             raise ValidationException('Not found: %s.' % importPath)
+        if params.get('importTar') is True:
+            progress.update(message='Reading tape archive...', total=0)
+            self._importTar(importPath, parent, progress, user)
+            return
         if not os.path.isdir(importPath):
             name = os.path.basename(importPath)
             progress.update(message=name)

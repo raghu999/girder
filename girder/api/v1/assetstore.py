@@ -144,11 +144,13 @@ class Assetstore(Resource):
         .param('fileExcludeRegex', 'If set, only filenames that do not match this regular '
                'expression will be imported. If a file matches both the include and exclude regex, '
                'it will be excluded.', required=False)
+        .param('importTar', 'Set to true to import all files within a tarball recursively.',
+               dataType='boolean', required=False, default=False)
         .errorResponse()
         .errorResponse('You are not an administrator.', 403)
     )
     def importData(self, assetstore, importPath, destinationId, destinationType, progress,
-                   leafFoldersAsItems, fileIncludeRegex, fileExcludeRegex):
+                   leafFoldersAsItems, fileIncludeRegex, fileExcludeRegex, importTar):
         user = self.getCurrentUser()
         parent = self.model(destinationType).load(
             destinationId, user=user, level=AccessType.ADMIN, exc=True)
@@ -159,6 +161,7 @@ class Assetstore(Resource):
                     'fileIncludeRegex': fileIncludeRegex,
                     'fileExcludeRegex': fileExcludeRegex,
                     'importPath': importPath,
+                    'importTar': importTar,
                 }, progress=ctx, user=user, leafFoldersAsItems=leafFoldersAsItems)
 
     @access.admin
