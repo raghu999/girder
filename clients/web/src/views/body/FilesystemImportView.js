@@ -13,7 +13,8 @@ var FilesystemImportView = View.extend({
 
             var destId = this.$('#g-filesystem-import-dest-id').val().trim(),
                 destType = this.$('#g-filesystem-import-dest-type').val(),
-                foldersAsItems = this.$('#g-filesystem-import-leaf-items').val();
+                foldersAsItems = this.$('#g-filesystem-import-leaf-items').val(),
+                importTar = this.$('#g-filesystem-import-tar').val();
 
             this.$('.g-validation-failed-message').empty();
 
@@ -24,6 +25,7 @@ var FilesystemImportView = View.extend({
             }, this).import({
                 importPath: this.$('#g-filesystem-import-path').val().trim(),
                 leafFoldersAsItems: foldersAsItems,
+                importTar,
                 destinationId: destId,
                 destinationType: destType,
                 progress: true
